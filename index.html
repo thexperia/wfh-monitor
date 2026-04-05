@@ -10,13 +10,13 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import { getFirestore, collection, addDoc, getDocs, doc, deleteDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
   const firebaseConfig = {
-  apiKey: "AIzaSyCdgnSakteq8YobjuFm9vVEcyk8pAOpbmw",
-  authDomain: "wfh-diy.firebaseapp.com",
-  projectId: "wfh-diy",
-  storageBucket: "wfh-diy.firebasestorage.app",
-  messagingSenderId: "950423357810",
-  appId: "1:950423357810:web:d68bce2aa5a539a63a35eb"
-};
+    apiKey: "AIzaSyCdgnSakteq8YobjuFm9vVEcyk8pAOpbmw",
+    authDomain: "wfh-diy.firebaseapp.com",
+    projectId: "wfh-diy",
+    storageBucket: "wfh-diy.firebasestorage.app",
+    messagingSenderId: "950423357810",
+    appId: "1:950423357810:web:d68bce2aa5a539a63a35eb"
+  };
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
   window._db = db;
@@ -637,7 +637,7 @@ function renderHist(entries){
   body.innerHTML=rows.map(e=>{
     const scored=Math.round(e.raw*(W[e.type]||0));
     const act=isAdmin
-      ?'<span class="h-del" onclick="openEdit(''+e.id+'')">✏️</span>&nbsp;<span class="h-del" onclick="delEntry(''+e.id+'')">✕</span>'
+      ?'<span class="h-del" onclick="openEdit(\''+e.id+'\')">✏️</span>&nbsp;<span class="h-del" onclick="delEntry(\''+e.id+'\')">✕</span>'
       :'<span class="h-del" style="opacity:.2;cursor:default">🔒</span>';
     return '<div class="hist-row">'+
       '<div><div style="font-weight:600;font-size:12px">'+e.name+'</div><div class="hist-sub">'+e.unit+' · '+(e.penilai||e.pic)+'</div></div>'+
