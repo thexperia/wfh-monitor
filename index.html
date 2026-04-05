@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WFH Availability Monitor — KPwBI DIY</title>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Source+Sans+3:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- Firebase SDK -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getFirestore, collection, addDoc, getDocs, doc, deleteDoc, updateDoc, query, where, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  // ════════════════════════════════════════════════
+  // GANTI BAGIAN INI DENGAN KONFIGURASI FIREBASE ANDA
+  // Lihat panduan deploy untuk cara mendapatkan nilai ini
+  // ════════════════════════════════════════════════
+  const firebaseConfig = {
+  apiKey: "AIzaSyCdgnSakteq8YobjuFm9vVEcyk8pAOpbmw",
+  authDomain: "wfh-diy.firebaseapp.com",
+  projectId: "wfh-diy",
+  storageBucket: "wfh-diy.firebasestorage.app",
+  messagingSenderId: "950423357810",
+  appId: "1:950423357810:web:d68bce2aa5a539a63a35eb"
+  };
+  // ════════════════════════════════════════════════
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  // Expose ke global scope agar bisa diakses dari script biasa
+  window._db = db;
+  window._firebase = { collection, addDoc, getDocs, doc, deleteDoc, updateDoc, query, where, orderBy };
+  window._dbReady = true;
+  window.dispatchEvent(new Event('firebase-ready'));
+</script>
+
+<style>
+:root {
+  --bi-blue:    #003D7A;
+  --bi-blue-d:  #002C5A;
+  --bi-blue-m:  #1A5FA8;
+  --bi-blue-l:  #E8EFF9;
+  --bi-blue-xl: #F0F5FC;
+  --bi-gold:    #C9A84C;
+  --bi-gold-l:  #FBF5E6;
+  --gray-900:   #1C1C1E;
+  --gray-700:   #3A3A3C;
+  --gray-500:   #636366;
+  --gray-400:   #8E8E93;
+  --gray-200:   #E5E5EA;
+  --gray-100:   #F2F2F7;
+  --gray-50:    #F8F8FC;
+  --white:      #FFFFFF;
+  --green:      #1B7A3E;
+  --green-l:    #E9F5EE;
+  --amber:      #B45309;
+  --amber-l:    #FEF3E2;
+  --red:        #B91C1C;
+  --red-l:      #FEF2F2;
+  --border:     #DDE3EE;
+  --shadow-sm:  0 1px 3px rgba(0,61,122,0.08);
+  --shadow:     0 2px 12px rgba(0,61,122,0.10);
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Source Sans 3',sans-serif;background:var(--gray-50);color:var(--gray-900);min-height:100vh;}
+
+/* ── HEADER ── */
+header{background:var(--bi-blue);position:sticky;top:0;z-index:200;box-shadow:0 2px 16px rgba(0,61,122,0.25);}
+.header-top{background:var(--bi-blue-d);padding:5px 32px;display:flex;align-items:center;justify-content:space-between;}
+.header-top span{font-size:11px;color:rgba(255,255,255,0.7);letter-spacing:.3px;}
+.header-main{padding:0 32px;display:flex;align-items:center;justify-content:space-between;height:60px;}
+.brand{display:flex;align-items:center;gap:14px;}
+.bi-emblem{width:40px;height:40px;background:var(--white);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Libre Baskerville',serif;font-weight:700;color:var(--bi-blue);font-size:13px;letter-spacing:-1px;flex-shrink:0;box-shadow:0 0 0 2px rgba(255,255,255,0.3);}
+.brand-text-wrap{border-left:1px solid rgba(255,255,255,0.25);padding-left:12px;}
+.brand-title{font-family:'Libre Baskerville',serif;font-size:14px;color:var(--white);font-weight:700;line-height:1.2;}
+.brand-sub{font-size:10px;color:rgba(255,255,255,0.65);letter-spacing:.4px;text-transform:uppercase;margin-top:1px;}
+nav{display:flex;gap:4px;}
+.nav-btn{padding:7px 16px;border-radius:5px;border:none;cursor:pointer;font-family:'Source Sans 3',sans-serif;font-size:13px;font-weight:500;color:rgba(255,255,255,0.75);background:transparent;transition:all .18s;}
+.nav-btn:hover{background:rgba(255,255,255,0.12);color:var(--white);}
+.nav-btn.active{background:var(--white);color:var(--bi-blue);font-weight:700;}
+.nav-right{display:flex;align-items:center;gap:8px;}
+.admin-badge{display:none;align-items:center;gap:5px;background:var(--bi-gold-l);border:1px solid var(--bi-gold);border-radius:4px;padding:3px 10px;font-size:11px;color:#8A6A00;font-weight:700;}
+.admin-badge.show{display:flex;}
+.admin-btn{padding:6px 14px;border-radius:5px;border:1.5px solid rgba(255,255,255,0.3);cursor:pointer;font-family:'Source Sans 3',sans-serif;font-size:12px;font-weight:500;color:rgba(255,255,255,0.8);background:transparent;transition:all .18s;}
+.admin-btn:hover{border-color:var(--white);color:var(--white);}
+
+/* CONNECTION STATUS */
+.conn-status{position:fixed;bottom:16px;right:16px;padding:8px 14px;border-radius:6px;font-size:12px;font-weight:600;z-index:300;display:flex;align-items:center;gap:6px;box-shadow:var(--shadow);}
+.conn-status.ok{background:var(--green-l);color:var(--green);border:1px solid #A8D8B8;}
+.conn-status.err{background:var(--red-l);color:var(--red);border:1px solid #F5B8B8;}
+.conn-status.loading{background:var(--bi-blue-l);color:var(--bi-blue);border:1px solid #C5D5EE;}
+.conn-dot{width:7px;height:7px;border-radius:50%;background:currentColor;}
+
+/* ── PAGES ── */
+.page{display:none;}.page.active{display:block;}
+.wrap{max-width:1080px;margin:0 auto;padding:32px;}
+.form-wrap{max-width:700px;margin:0 auto;padding:32px;}
+
+/* ── DASHBOARD ── */
+.page-head{margin-bottom:24px;}
+.page-head h1{font-family:'Libre Baskerville',serif;font-size:22px;color:var(--gray-900);margin-bottom:3px;}
+.page-head p{font-size:13px;color:var(--gray-500);}
+.period-tag{display:inline-flex;align-items:center;gap:4px;background:var(--bi-blue-l);border:1px solid #C5D5EE;border-radius:4px;padding:3px 10px;font-size:11px;color:var(--bi-blue);font-weight:700;letter-spacing:.3px;margin-left:8px;vertical-align:middle;}
+.refresh-btn{background:none;border:1px solid var(--border);border-radius:5px;padding:5px 12px;cursor:pointer;font-size:12px;color:var(--gray-500);font-family:'Source Sans 3',sans-serif;margin-left:8px;transition:all .18s;}
+.refresh-btn:hover{border-color:var(--bi-blue);color:var(--bi-blue);}
+
+.kpi-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:24px;}
+.kpi-card{background:var(--white);border:1px solid var(--border);border-radius:8px;padding:20px 22px;box-shadow:var(--shadow-sm);display:flex;align-items:center;gap:16px;}
+.kpi-icon{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
+.kpi-icon.blue{background:var(--bi-blue-l);}
+.kpi-icon.green{background:var(--green-l);}
+.kpi-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:var(--gray-400);margin-bottom:4px;}
+.kpi-val{font-family:'Libre Baskerville',serif;font-size:30px;color:var(--gray-900);line-height:1;}
+.kpi-sub{font-size:11px;color:var(--gray-400);margin-top:3px;}
+
+.sec-hdr{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--gray-400);margin-bottom:12px;display:flex;align-items:center;gap:8px;}
+.sec-hdr::after{content:'';flex:1;height:1px;background:var(--border);}
+
+.lb-card{background:var(--white);border:1px solid var(--border);border-radius:8px;overflow:hidden;box-shadow:var(--shadow-sm);}
+.lb-head{display:grid;grid-template-columns:48px 1fr 105px 85px 90px 85px 90px;padding:10px 18px;background:var(--gray-100);border-bottom:1px solid var(--border);font-size:10px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:.5px;}
+.lb-row{display:grid;grid-template-columns:48px 1fr 105px 85px 90px 85px 90px;padding:13px 18px;border-bottom:1px solid var(--gray-100);align-items:center;transition:background .12s;}
+.lb-row:last-child{border-bottom:none;}
+.lb-row:hover{background:var(--bi-blue-xl);}
+.lb-row.top1{background:linear-gradient(90deg,#FFFDF0,var(--white) 50%);}
+.lb-row.top2{background:linear-gradient(90deg,#F5F8FF,var(--white) 50%);}
+.lb-row.top3{background:linear-gradient(90deg,#FFF8F5,var(--white) 50%);}
+.rank{font-family:'Libre Baskerville',serif;font-size:15px;color:var(--gray-300);text-align:center;}
+.rank.r1{color:#B8962E;}.rank.r2{color:#7A8FA6;}.rank.r3{color:#A0714A;}
+.person-wrap{display:flex;align-items:center;gap:10px;}
+.av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;color:var(--white);flex-shrink:0;}
+.p-name{font-size:13px;font-weight:600;color:var(--gray-900);}
+.p-unit{font-size:10px;color:var(--gray-400);}
+.score-cell{text-align:center;}
+.score-num{font-family:'Libre Baskerville',serif;font-size:14px;color:var(--gray-700);}
+.sbar{width:44px;height:3px;background:var(--gray-200);border-radius:99px;overflow:hidden;margin:3px auto 0;}
+.sbar-fill{height:100%;border-radius:99px;}
+.total-score{font-family:'Libre Baskerville',serif;font-size:17px;font-weight:700;text-align:center;}
+.grade-p{display:inline-block;padding:2px 9px;border-radius:3px;font-size:10px;font-weight:700;letter-spacing:.4px;}
+.gS{background:var(--green-l);color:var(--green);border:1px solid #A8D8B8;}
+.gA{background:var(--bi-blue-l);color:var(--bi-blue);border:1px solid #C5D5EE;}
+.gB{background:var(--bi-gold-l);color:#8A6A00;border:1px solid #E8D08A;}
+.gC{background:var(--amber-l);color:var(--amber);border:1px solid #F5C870;}
+.gD{background:var(--gray-100);color:var(--gray-500);border:1px solid var(--gray-200);}
+.empty-lb{padding:52px;text-align:center;color:var(--gray-400);font-size:14px;}
+.footer-note{font-size:11px;color:var(--gray-400);margin-top:10px;display:flex;gap:14px;flex-wrap:wrap;align-items:center;}
+
+/* SKELETON LOADING */
+.skeleton{background:linear-gradient(90deg,var(--gray-100) 25%,var(--gray-50) 50%,var(--gray-100) 75%);background-size:200% 100%;animation:shimmer 1.4s infinite;border-radius:4px;}
+@keyframes shimmer{0%{background-position:200% 0;}100%{background-position:-200% 0;}}
+
+/* ── FORM ── */
+.form-head{margin-bottom:24px;}
+.form-head h1{font-family:'Libre Baskerville',serif;font-size:21px;color:var(--gray-900);margin-bottom:4px;}
+.form-head p{font-size:13px;color:var(--gray-500);line-height:1.6;}
+.mode-toggle{display:flex;background:var(--gray-100);border-radius:8px;padding:4px;margin-bottom:20px;gap:4px;}
+.mode-btn{flex:1;padding:9px;border:none;border-radius:6px;cursor:pointer;font-family:'Source Sans 3',sans-serif;font-size:13px;font-weight:500;color:var(--gray-500);background:transparent;transition:all .18s;text-align:center;}
+.mode-btn.active{background:var(--white);color:var(--bi-blue);font-weight:700;box-shadow:var(--shadow-sm);}
+.form-card{background:var(--white);border:1px solid var(--border);border-radius:8px;padding:22px 24px;margin-bottom:14px;box-shadow:var(--shadow-sm);}
+.card-hdr{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;color:var(--bi-blue);margin-bottom:18px;padding-bottom:10px;border-bottom:1px solid var(--bi-blue-l);display:flex;align-items:center;gap:6px;}
+.id-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
+.frow{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
+.frow.full{grid-template-columns:1fr;margin-bottom:12px;}
+.field label{display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--gray-500);margin-bottom:5px;}
+.field input,.field select,.field textarea{width:100%;padding:9px 11px;background:var(--white);border:1.5px solid var(--border);border-radius:6px;color:var(--gray-900);font-family:'Source Sans 3',sans-serif;font-size:13px;outline:none;transition:border-color .18s,box-shadow .18s;}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--bi-blue);box-shadow:0 0 0 3px rgba(0,61,122,0.08);}
+.field select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='7' viewBox='0 0 11 7'%3E%3Cpath d='M1 1l4.5 4.5L10 1' stroke='%238E8E93' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center;}
+.field textarea{resize:vertical;min-height:60px;}
+.penilai-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:6px;}
+.p-opt{border:1.5px solid var(--border);border-radius:6px;padding:9px 6px;cursor:pointer;text-align:center;transition:all .15s;background:var(--white);}
+.p-opt:hover,.p-opt.sel{border-color:var(--bi-blue);background:var(--bi-blue-l);}
+.p-opt .pi{font-size:16px;margin-bottom:3px;}
+.p-opt .pl{font-size:10px;font-weight:600;color:var(--gray-700);line-height:1.3;}
+.eval-tabs{display:flex;gap:8px;margin-bottom:16px;}
+.eval-tab{flex:1;border:1.5px solid var(--border);border-radius:6px;padding:10px 8px;cursor:pointer;text-align:center;transition:all .15s;background:var(--white);}
+.eval-tab:hover,.eval-tab.sel{border-color:var(--bi-blue);background:var(--bi-blue-l);}
+.eval-tab .et-icon{font-size:16px;margin-bottom:3px;}
+.eval-tab .et-label{font-size:11px;font-weight:600;color:var(--gray-800);}
+.eval-tab .et-w{font-size:10px;color:var(--gray-400);}
+.wt-bar-wrap{margin-bottom:16px;background:var(--gray-100);border-radius:6px;padding:12px 14px;}
+.wt-bar-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--gray-400);margin-bottom:8px;}
+.wt-bars{display:flex;height:8px;border-radius:4px;overflow:hidden;gap:2px;}
+.wb1{background:var(--bi-blue);flex:30;}
+.wb2{background:var(--green);flex:40;}
+.wb3{background:var(--bi-gold);flex:30;}
+.wt-legend{display:flex;gap:14px;margin-top:8px;flex-wrap:wrap;}
+.wl{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--gray-500);}
+.wld{width:8px;height:8px;border-radius:2px;flex-shrink:0;}
+.pt-lbl-row{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--gray-500);margin-bottom:7px;}
+.pt-grid{display:grid;gap:7px;}
+.cols4{grid-template-columns:repeat(4,1fr);}
+.pt-card{border:1.5px solid var(--border);border-radius:6px;padding:9px 5px;cursor:pointer;text-align:center;transition:all .15s;background:var(--white);}
+.pt-card:hover,.pt-card.sel{border-color:var(--bi-blue);background:var(--bi-blue-l);}
+.pt-val{font-family:'Libre Baskerville',serif;font-size:17px;color:var(--gray-900);}
+.pt-lbl{font-size:9px;color:var(--gray-500);margin-top:2px;line-height:1.4;}
+.no-reply-row{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--gray-500);cursor:pointer;margin-top:8px;}
+.no-reply-row input{width:auto;accent-color:var(--bi-blue);}
+.hint{font-size:11px;color:var(--gray-400);margin-top:6px;font-style:italic;line-height:1.5;}
+.batch-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+.batch-section{background:var(--gray-100);border-radius:6px;padding:14px;}
+.batch-sec-hdr{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px;display:flex;align-items:center;gap:5px;}
+.batch-sec-hdr.blue{color:var(--bi-blue);}
+.batch-sec-hdr.green{color:var(--green);}
+.batch-sec-hdr.gold{color:#8A6A00;}
+.batch-pt-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;}
+.bpt{border:1.5px solid var(--border);border-radius:5px;padding:7px 4px;cursor:pointer;text-align:center;transition:all .15s;background:var(--white);}
+.bpt:hover,.bpt.sel{border-color:var(--bi-blue);background:var(--bi-blue-l);}
+.bpt .bpv{font-family:'Libre Baskerville',serif;font-size:14px;color:var(--gray-900);}
+.bpt .bpl{font-size:8.5px;color:var(--gray-500);margin-top:1px;line-height:1.3;}
+.batch-nr{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--gray-500);cursor:pointer;margin-top:7px;}
+.batch-nr input{width:auto;accent-color:var(--bi-blue);}
+.submit-btn{width:100%;padding:13px;border:none;border-radius:6px;cursor:pointer;background:var(--bi-blue);color:var(--white);font-family:'Source Sans 3',sans-serif;font-size:14px;font-weight:700;letter-spacing:.3px;transition:all .18s;margin-top:4px;}
+.submit-btn:hover{background:var(--bi-blue-d);box-shadow:0 4px 16px rgba(0,61,122,0.28);}
+.submit-btn:disabled{opacity:.5;cursor:not-allowed;}
+.hist-hdr-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;margin-top:24px;}
+.hist-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--gray-400);}
+.clr-btn{background:none;border:none;font-size:11px;color:var(--red);cursor:pointer;opacity:.7;}
+.clr-btn:hover{opacity:1;}
+.hist-card{background:var(--white);border:1px solid var(--border);border-radius:8px;overflow:hidden;box-shadow:var(--shadow-sm);}
+.hist-head{display:grid;grid-template-columns:1fr 75px 65px 65px 65px 55px;padding:9px 14px;background:var(--gray-100);border-bottom:1px solid var(--border);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-400);}
+.hist-row{display:grid;grid-template-columns:1fr 75px 65px 65px 65px 55px;padding:10px 14px;border-bottom:1px solid var(--gray-100);font-size:12px;align-items:center;}
+.hist-row:last-child{border-bottom:none;}
+.hist-sub{font-size:10px;color:var(--gray-400);}
+.h-score{font-family:'Libre Baskerville',serif;font-size:13px;text-align:center;}
+.h-del{color:var(--red);cursor:pointer;font-size:11px;text-align:right;opacity:.5;}
+.h-del:hover{opacity:1;}
+.empty-hist{padding:22px;text-align:center;color:var(--gray-400);font-size:13px;}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,30,70,0.4);backdrop-filter:blur(4px);z-index:500;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s;}
+.modal-overlay.show{opacity:1;pointer-events:all;}
+.modal{background:var(--white);border-radius:10px;padding:32px 28px;max-width:380px;width:90%;box-shadow:0 20px 60px rgba(0,30,70,0.2);transform:translateY(12px);transition:transform .22s ease;}
+.modal-overlay.show .modal{transform:none;}
+.modal-icon{font-size:40px;text-align:center;margin-bottom:12px;}
+.modal-title{font-family:'Libre Baskerville',serif;font-size:18px;color:var(--gray-900);text-align:center;margin-bottom:6px;}
+.modal-sub{font-size:13px;color:var(--gray-500);text-align:center;line-height:1.6;margin-bottom:20px;}
+.modal-btn{width:100%;padding:11px;border:none;border-radius:6px;cursor:pointer;background:var(--bi-blue);color:var(--white);font-family:'Source Sans 3',sans-serif;font-size:14px;font-weight:600;}
+.modal-btn:hover{background:var(--bi-blue-d);}
+.modal-input{width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:6px;font-family:'Source Sans 3',sans-serif;font-size:14px;margin-bottom:12px;outline:none;}
+.modal-input:focus{border-color:var(--bi-blue);box-shadow:0 0 0 3px rgba(0,61,122,0.08);}
+.modal-err{font-size:12px;color:var(--red);text-align:center;margin-bottom:10px;display:none;}
+.modal-cancel{display:block;width:100%;padding:9px;border:1.5px solid var(--border);border-radius:6px;background:none;cursor:pointer;font-family:'Source Sans 3',sans-serif;font-size:13px;color:var(--gray-500);margin-top:8px;}
+@media(max-width:768px){
+  .wrap,.form-wrap{padding:16px;}
+  .header-main,.header-top{padding:0 16px;}
+  .kpi-row{grid-template-columns:1fr;}
+  .lb-head,.lb-row{grid-template-columns:36px 1fr 70px 65px 65px;}
+  .lb-head *:nth-child(4),.lb-row *:nth-child(4),.lb-head *:nth-child(6),.lb-row *:nth-child(6){display:none;}
+  .id-grid,.frow{grid-template-columns:1fr;}
+  .penilai-row{grid-template-columns:repeat(2,1fr);}
+  .batch-grid{grid-template-columns:1fr;}
+  .eval-tabs{flex-direction:column;}
+}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-top">
+    <span>Kantor Perwakilan Bank Indonesia — Daerah Istimewa Yogyakarta</span>
+    <span id="hdr-date"></span>
+  </div>
+  <div class="header-main">
+    <div class="brand">
+      <div class="bi-emblem">BI</div>
+      <div class="brand-text-wrap">
+        <div class="brand-title">WFH Availability Monitor</div>
+        <div class="brand-sub">Sistem Pemantauan Kinerja WFH · KPwBI DIY</div>
+      </div>
+    </div>
+    <nav>
+      <button class="nav-btn active" onclick="showPage('dash',this)">📊 Dashboard</button>
+      <button class="nav-btn" onclick="showPage('form',this)">📝 Input Penilaian</button>
+    </nav>
+    <div class="nav-right">
+      <div class="admin-badge" id="admin-badge">🔑 Admin</div>
+      <button class="admin-btn" onclick="openAdminModal()" id="admin-toggle">🔐 Admin</button>
+    </div>
+  </div>
+</header>
+
+<div class="conn-status loading" id="conn-status">
+  <div class="conn-dot"></div> <span id="conn-text">Menghubungkan...</span>
+</div>
+
+<!-- ══ DASHBOARD ══ -->
+<div class="page active" id="page-dash">
+  <div class="wrap">
+    <div class="page-head">
+      <h1>Availability Leaderboard <span class="period-tag" id="period-tag">📅 —</span>
+        <button class="refresh-btn" onclick="loadDashboard()">↻ Refresh</button>
+      </h1>
+      <p>Penilaian berdasarkan response time chat/pesan, monitoring online, dan share live location pegawai WFH</p>
+    </div>
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-icon blue">👥</div>
+        <div><div class="kpi-label">Total Pegawai Dinilai</div><div class="kpi-val" id="kpi-total">—</div><div class="kpi-sub">pegawai bulan ini</div></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon green">📈</div>
+        <div><div class="kpi-label">Rata-rata Skor</div><div class="kpi-val" id="kpi-avg">—</div><div class="kpi-sub">dari 100 poin</div></div>
+      </div>
+    </div>
+    <div class="sec-hdr">Ranking Pegawai</div>
+    <div class="lb-card">
+      <div class="lb-head">
+        <span>#</span><span>Pegawai</span>
+        <span style="text-align:center">Tgl Sampling</span>
+        <span style="text-align:center">Chat</span>
+        <span style="text-align:center">Monitoring</span>
+        <span style="text-align:center">Lokasi</span>
+        <span style="text-align:center">Total</span>
+      </div>
+      <div id="lb-body"><div class="empty-lb"><div style="font-size:28px;margin-bottom:8px">⏳</div>Memuat data...</div></div>
+    </div>
+    <div class="footer-note">
+      <span>Grade:</span>
+      <div><span class="grade-p gS">S</span> ≥90</div>
+      <div><span class="grade-p gA">A</span> ≥80</div>
+      <div><span class="grade-p gB">B</span> ≥70</div>
+      <div><span class="grade-p gC">C</span> ≥60</div>
+      <div><span class="grade-p gD">D</span> &lt;60</div>
+      <span style="margin:0 4px">|</span>
+      <span>Bobot: Chat 30% · Monitoring 40% · Lokasi 30%</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══ FORM ══ -->
+<div class="page" id="page-form">
+  <div class="form-wrap">
+    <div class="form-head">
+      <h1>Input Penilaian WFH</h1>
+      <p>Pilih mode <b>Satu Komponen</b> untuk input bertahap, atau <b>Lengkap Sekaligus</b> untuk isi ketiga komponen dalam satu input.</p>
+    </div>
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="mode-single-btn" onclick="setMode('single')">📝 Satu Komponen</button>
+      <button class="mode-btn" id="mode-batch-btn" onclick="setMode('batch')">⚡ Lengkap Sekaligus</button>
+    </div>
+
+    <!-- IDENTITAS YANG DINILAI -->
+    <div class="form-card">
+      <div class="card-hdr">👤 Pegawai yang Dinilai</div>
+      <div class="id-grid">
+        <div class="field"><label>Nama Pegawai</label><input type="text" id="f-name" placeholder="Nama lengkap" list="namelist"><datalist id="namelist"></datalist></div>
+        <div class="field"><label>NIP</label><input type="text" id="f-nip" placeholder="Nomor Induk Pegawai"></div>
+      </div>
+      <div class="frow">
+        <div class="field"><label>Unit Kerja</label>
+          <select id="f-unit">
+            <option value="">Pilih unit kerja</option>
+            <option>TPKP</option><option>FDSEK</option><option>FPPUKIS</option>
+            <option>TIK</option><option>UKh</option><option>FIKSP</option><option>FIPSP</option>
+            <option>TIKSPUR</option><option>TMI</option>
+          </select>
+        </div>
+        <div class="field"><label>Tanggal Evaluasi</label><input type="date" id="f-date"></div>
+      </div>
+    </div>
+
+    <!-- IDENTITAS PENILAI -->
+    <div class="form-card">
+      <div class="card-hdr">✍️ Penilai</div>
+      <div class="frow full">
+        <div class="field"><label>Nama Penilai</label><input type="text" id="f-pic" placeholder="Nama lengkap penilai"></div>
+      </div>
+      <div class="field"><label>Kapasitas Penilai</label>
+        <div class="penilai-row">
+          <div class="p-opt sel" onclick="selPenilai('Pimpinan',this)"><div class="pi">👔</div><div class="pl">Pimpinan</div></div>
+          <div class="p-opt" onclick="selPenilai('Line Manager',this)"><div class="pi">🗂️</div><div class="pl">Line Manager</div></div>
+          <div class="p-opt" onclick="selPenilai('Tim ICO',this)"><div class="pi">🔍</div><div class="pl">Tim ICO</div></div>
+          <div class="p-opt" onclick="selPenilai('Lain-lain',this)"><div class="pi">👥</div><div class="pl">Lain-lain</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SINGLE MODE -->
+    <div id="single-mode">
+      <div class="form-card">
+        <div class="card-hdr">📡 Jenis Evaluasi</div>
+        <div class="wt-bar-wrap">
+          <div class="wt-bar-label">Distribusi Bobot</div>
+          <div class="wt-bars"><div class="wb1"></div><div class="wb2"></div><div class="wb3"></div></div>
+          <div class="wt-legend">
+            <div class="wl"><div class="wld" style="background:var(--bi-blue)"></div>Chat/Pesan (30%)</div>
+            <div class="wl"><div class="wld" style="background:var(--green)"></div>Monitoring Online (40%)</div>
+            <div class="wl"><div class="wld" style="background:var(--bi-gold)"></div>Share Live Location (30%)</div>
+          </div>
+        </div>
+        <div class="eval-tabs">
+          <div class="eval-tab sel" id="et-chat" onclick="selEval('chat')"><div class="et-icon">💬</div><div class="et-label">Chat / Pesan</div><div class="et-w">Bobot 30%</div></div>
+          <div class="eval-tab" id="et-mon" onclick="selEval('mon')"><div class="et-icon">📹</div><div class="et-label">Monitoring Online</div><div class="et-w">Bobot 40%</div></div>
+          <div class="eval-tab" id="et-loc" onclick="selEval('loc')"><div class="et-icon">📍</div><div class="et-label">Share Live Location</div><div class="et-w">Bobot 30%</div></div>
+        </div>
+        <div id="sc-chat">
+          <div class="pt-lbl-row">Waktu Respons Chat</div>
+          <div class="pt-grid cols4">
+            <div class="pt-card sel" onclick="selPt(this,100)"><div class="pt-val">100</div><div class="pt-lbl">&lt; 10 menit</div></div>
+            <div class="pt-card" onclick="selPt(this,75)"><div class="pt-val">75</div><div class="pt-lbl">10 – 20 menit</div></div>
+            <div class="pt-card" onclick="selPt(this,50)"><div class="pt-val">50</div><div class="pt-lbl">20 – 40 menit</div></div>
+            <div class="pt-card" onclick="selPt(this,25)"><div class="pt-val">25</div><div class="pt-lbl">40 – 60 menit</div></div>
+          </div>
+          <label class="no-reply-row"><input type="checkbox" id="nr-chat" onchange="handleNR(this,'sc-chat')"> Tidak membalas di jam kerja (poin 0)</label>
+          <div class="hint">Poin dikalikan bobot 30% untuk skor akhir.</div>
+        </div>
+        <div id="sc-mon" style="display:none">
+          <div class="pt-lbl-row">Hasil Monitoring Online (Video Call)</div>
+          <div class="pt-grid cols4">
+            <div class="pt-card sel" onclick="selPt(this,100)"><div class="pt-val">100</div><div class="pt-lbl">Hadir &amp; siap &lt;5 mnt</div></div>
+            <div class="pt-card" onclick="selPt(this,85)"><div class="pt-val">85</div><div class="pt-lbl">Hadir 5–10 mnt</div></div>
+            <div class="pt-card" onclick="selPt(this,65)"><div class="pt-val">65</div><div class="pt-lbl">Hadir 10–20 mnt</div></div>
+            <div class="pt-card" onclick="selPt(this,40)"><div class="pt-val">40</div><div class="pt-lbl">Hadir &gt;20 mnt</div></div>
+          </div>
+          <label class="no-reply-row"><input type="checkbox" id="nr-mon" onchange="handleNR(this,'sc-mon')"> Tidak hadir / tidak merespons (poin 0)</label>
+          <div class="hint">Poin dikalikan bobot 40% untuk skor akhir.</div>
+        </div>
+        <div id="sc-loc" style="display:none">
+          <div class="pt-lbl-row">Waktu Respons Share Live Location</div>
+          <div class="pt-grid cols4">
+            <div class="pt-card sel" onclick="selPt(this,100)"><div class="pt-val">100</div><div class="pt-lbl">&lt; 10 menit</div></div>
+            <div class="pt-card" onclick="selPt(this,75)"><div class="pt-val">75</div><div class="pt-lbl">10 – 20 menit</div></div>
+            <div class="pt-card" onclick="selPt(this,50)"><div class="pt-val">50</div><div class="pt-lbl">20 – 40 menit</div></div>
+            <div class="pt-card" onclick="selPt(this,25)"><div class="pt-val">25</div><div class="pt-lbl">40 – 60 menit</div></div>
+          </div>
+          <label class="no-reply-row"><input type="checkbox" id="nr-loc" onchange="handleNR(this,'sc-loc')"> Tidak mengirimkan lokasi (poin 0)</label>
+          <div class="hint">Poin dikalikan bobot 30% untuk skor akhir.</div>
+        </div>
+      </div>
+      <div class="form-card">
+        <div class="card-hdr">📝 Catatan</div>
+        <div class="frow full"><div class="field"><textarea id="f-note-s" placeholder="Opsional — keterangan tambahan"></textarea></div></div>
+      </div>
+    </div>
+
+    <!-- BATCH MODE -->
+    <div id="batch-mode" style="display:none">
+      <div class="form-card">
+        <div class="card-hdr">📡 Penilaian 3 Komponen Sekaligus</div>
+        <div class="wt-bar-wrap" style="margin-bottom:14px">
+          <div class="wt-bar-label">Bobot: Chat 30% · Monitoring 40% · Lokasi 30%</div>
+          <div class="wt-bars"><div class="wb1"></div><div class="wb2"></div><div class="wb3"></div></div>
+        </div>
+        <div class="batch-grid">
+          <div class="batch-section">
+            <div class="batch-sec-hdr blue">💬 Chat / Pesan</div>
+            <div class="batch-pt-grid">
+              <div class="bpt sel" onclick="selBatch('chat',this,100)"><div class="bpv">100</div><div class="bpl">&lt;10 mnt</div></div>
+              <div class="bpt" onclick="selBatch('chat',this,75)"><div class="bpv">75</div><div class="bpl">10–20 mnt</div></div>
+              <div class="bpt" onclick="selBatch('chat',this,50)"><div class="bpv">50</div><div class="bpl">20–40 mnt</div></div>
+              <div class="bpt" onclick="selBatch('chat',this,25)"><div class="bpv">25</div><div class="bpl">40–60 mnt</div></div>
+            </div>
+            <label class="batch-nr"><input type="checkbox" id="bnr-chat" onchange="handleBatchNR(this,'chat')"> Tidak balas (0)</label>
+          </div>
+          <div class="batch-section">
+            <div class="batch-sec-hdr green">📹 Monitoring Online</div>
+            <div class="batch-pt-grid">
+              <div class="bpt sel" onclick="selBatch('mon',this,100)"><div class="bpv">100</div><div class="bpl">Hadir &lt;5 mnt</div></div>
+              <div class="bpt" onclick="selBatch('mon',this,85)"><div class="bpv">85</div><div class="bpl">5–10 mnt</div></div>
+              <div class="bpt" onclick="selBatch('mon',this,65)"><div class="bpv">65</div><div class="bpl">10–20 mnt</div></div>
+              <div class="bpt" onclick="selBatch('mon',this,40)"><div class="bpv">40</div><div class="bpl">&gt;20 mnt</div></div>
+            </div>
+            <label class="batch-nr"><input type="checkbox" id="bnr-mon" onchange="handleBatchNR(this,'mon')"> Tidak hadir (0)</label>
+          </div>
+          <div class="batch-section">
+            <div class="batch-sec-hdr gold">📍 Share Live Location</div>
+            <div class="batch-pt-grid">
+              <div class="bpt sel" onclick="selBatch('loc',this,100)"><div class="bpv">100</div><div class="bpl">&lt;10 mnt</div></div>
+              <div class="bpt" onclick="selBatch('loc',this,75)"><div class="bpv">75</div><div class="bpl">10–20 mnt</div></div>
+              <div class="bpt" onclick="selBatch('loc',this,50)"><div class="bpv">50</div><div class="bpl">20–40 mnt</div></div>
+              <div class="bpt" onclick="selBatch('loc',this,25)"><div class="bpv">25</div><div class="bpl">40–60 mnt</div></div>
+            </div>
+            <label class="batch-nr"><input type="checkbox" id="bnr-loc" onchange="handleBatchNR(this,'loc')"> Tidak kirim (0)</label>
+          </div>
+        </div>
+      </div>
+      <div class="form-card">
+        <div class="card-hdr">📝 Catatan</div>
+        <div class="frow full"><div class="field"><textarea id="f-note-b" placeholder="Opsional — keterangan tambahan"></textarea></div></div>
+      </div>
+    </div>
+
+    <button class="submit-btn" id="submit-btn" onclick="submitForm()">Simpan Penilaian →</button>
+
+    <div class="hist-hdr-row">
+      <div class="hist-title">Riwayat Input Bulan Ini</div>
+      <button class="clr-btn" onclick="clearAll()">Hapus semua</button>
+    </div>
+    <div class="hist-card">
+      <div class="hist-head"><span>Pegawai</span><span style="text-align:center">Jenis</span><span style="text-align:center">Raw</span><span style="text-align:center">Skor</span><span style="text-align:center">Tgl</span><span></span></div>
+      <div id="hist-body"><div class="empty-hist">Memuat riwayat...</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- MODALS -->
+<div class="modal-overlay" id="modal-thanks">
+  <div class="modal">
+    <div class="modal-icon">✅</div>
+    <div class="modal-title">Penilaian Tersimpan</div>
+    <div class="modal-sub">Penilaian untuk <strong id="thanks-name">—</strong> berhasil disimpan ke database.</div>
+    <button class="modal-btn" onclick="closeModal('modal-thanks')">Tutup</button>
+  </div>
+</div>
+<div class="modal-overlay" id="modal-admin">
+  <div class="modal">
+    <div class="modal-icon">🔐</div>
+    <div class="modal-title">Login Admin</div>
+    <div class="modal-sub">Masukkan password untuk mengaktifkan mode admin.</div>
+    <input type="password" class="modal-input" id="admin-pass" placeholder="Password" onkeydown="if(event.key==='Enter')checkAdmin()">
+    <div class="modal-err" id="admin-err">Password salah. Coba lagi.</div>
+    <button class="modal-btn" onclick="checkAdmin()">Masuk</button>
+    <button class="modal-cancel" onclick="closeModal('modal-admin')">Batal</button>
+  </div>
+</div>
+<div class="modal-overlay" id="modal-edit">
+  <div class="modal">
+    <div class="modal-icon">✏️</div>
+    <div class="modal-title">Edit Penilaian</div>
+    <label style="font-size:10px;font-weight:700;color:var(--gray-500);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.7px">Raw Poin (0–100)</label>
+    <input type="number" class="modal-input" id="edit-raw" min="0" max="100">
+    <label style="font-size:10px;font-weight:700;color:var(--gray-500);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.7px">Catatan</label>
+    <input type="text" class="modal-input" id="edit-note" placeholder="Catatan">
+    <button class="modal-btn" onclick="saveEdit()">Simpan</button>
+    <button class="modal-cancel" onclick="closeModal('modal-edit')">Batal</button>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════
+// APP STATE
+// ══════════════════════════════════════════════
+const ADMIN_PASS = 'bismillah#21';
+const W = { chat: 0.30, mon: 0.40, loc: 0.30 };
+const COLORS = ['#003D7A','#1B7A3E','#8A6A00','#6D28A0','#B45309','#0E6D6D','#7A1B1B'];
+const ELABELS = { chat: '💬 Chat', mon: '📹 Monitoring', loc: '📍 Lokasi' };
+
+let isAdmin = false, editingId = null;
+let curEval = 'chat', curRaw = 100, curPenilai = 'Pimpinan';
+let curMode = 'single';
+let batchRaw = { chat: 100, mon: 100, loc: 100 };
+let localEntries = []; // cache lokal untuk riwayat
+let dbReady = false;
+
+// ══════════════════════════════════════════════
+// FIREBASE HELPERS
+// ══════════════════════════════════════════════
+function currMonth() {
+  const n = new Date();
+  return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0');
+}
+
+function setConn(state, text) {
+  const el = document.getElementById('conn-status');
+  const tx = document.getElementById('conn-text');
+  el.className = 'conn-status ' + state;
+  tx.textContent = text;
+  if (state === 'ok') setTimeout(() => { el.style.opacity = '0'; }, 3000);
+  else el.style.opacity = '1';
+}
+
+async function dbAdd(data) {
+  const { collection, addDoc } = window._firebase;
+  return await addDoc(collection(window._db, 'entries'), data);
+}
+
+async function dbGetMonth() {
+  const { collection, getDocs, query, where } = window._firebase;
+  const m = currMonth();
+  const start = m + '-01';
+  const end = m + '-31';
+  const q = query(
+    collection(window._db, 'entries'),
+    where('date', '>=', start),
+    where('date', '<=', end)
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+async function dbDelete(id) {
+  const { doc, deleteDoc } = window._firebase;
+  await deleteDoc(doc(window._db, 'entries', id));
+}
+
+async function dbUpdate(id, data) {
+  const { doc, updateDoc } = window._firebase;
+  await updateDoc(doc(window._db, 'entries', id), data);
+}
+
+// ══════════════════════════════════════════════
+// AGGREGATION
+// ══════════════════════════════════════════════
+function aggregatePeople(entries) {
+  const map = {};
+  entries.forEach(e => {
+    if (!map[e.name]) map[e.name] = { name: e.name, unit: e.unit, chat: null, mon: null, loc: null, chatD: null, monD: null, locD: null };
+    if (e.type === 'chat' && (!map[e.name].chatD || e.date > map[e.name].chatD)) { map[e.name].chat = e.raw; map[e.name].chatD = e.date; }
+    if (e.type === 'mon'  && (!map[e.name].monD  || e.date > map[e.name].monD))  { map[e.name].mon  = e.raw; map[e.name].monD  = e.date; }
+    if (e.type === 'loc'  && (!map[e.name].locD  || e.date > map[e.name].locD))  { map[e.name].loc  = e.raw; map[e.name].locD  = e.date; }
+  });
+  return Object.values(map).map(p => {
+    let t = 0;
+    if (p.chat !== null) t += p.chat * W.chat;
+    if (p.mon  !== null) t += p.mon  * W.mon;
+    if (p.loc  !== null) t += p.loc  * W.loc;
+    const dates = [p.chatD, p.monD, p.locD].filter(Boolean).sort();
+    return { ...p, total: Math.round(t), samplingDate: dates.slice(-1)[0] || '—' };
+  }).sort((a, b) => b.total - a.total);
+}
+
+function gradeOf(v) { if (v >= 90) return ['S','gS']; if (v >= 80) return ['A','gA']; if (v >= 70) return ['B','gB']; if (v >= 60) return ['C','gC']; return ['D','gD']; }
+function initials(s) { return s.split(' ').slice(0, 2).map(w => w[0] || '').join('').toUpperCase(); }
+function fmtDate(s) { if (!s || s === '—') return '—'; return new Date(s + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }); }
+
+// ══════════════════════════════════════════════
+// DASHBOARD
+// ══════════════════════════════════════════════
+async function loadDashboard() {
+  document.getElementById('lb-body').innerHTML = '<div class="empty-lb"><div style="font-size:28px;margin-bottom:8px">⏳</div>Memuat data...</div>';
+  try {
+    const entries = await dbGetMonth();
+    localEntries = entries;
+    renderDash(entries);
+    setConn('ok', '✓ Terhubung ke database');
+  } catch (e) {
+    document.getElementById('lb-body').innerHTML = '<div class="empty-lb">❌ Gagal memuat data. Periksa koneksi internet.</div>';
+    setConn('err', '✗ Gagal terhubung');
+  }
+}
+
+function renderDash(entries) {
+  const now = new Date();
+  document.getElementById('period-tag').textContent = '📅 ' + now.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+  const people = aggregatePeople(entries);
+  document.getElementById('kpi-total').textContent = people.length || '—';
+  document.getElementById('kpi-avg').textContent = people.length ? Math.round(people.reduce((s, p) => s + p.total, 0) / people.length) : '—';
+  const body = document.getElementById('lb-body');
+  if (!people.length) { body.innerHTML = '<div class="empty-lb">Belum ada data bulan ini. Silakan input penilaian.</div>'; return; }
+  const medals = ['🥇','🥈','🥉'];
+  body.innerHTML = people.map((p, i) => {
+    const bg = COLORS[i % COLORS.length], [gl, gc] = gradeOf(p.total);
+    const topCls = i === 0 ? 'top1' : i === 1 ? 'top2' : i === 2 ? 'top3' : '';
+    const scoreColor = p.total >= 80 ? 'var(--green)' : p.total >= 60 ? 'var(--amber)' : 'var(--red)';
+    return `<div class="lb-row ${topCls}" style="animation:fadeUp .25s ease ${i * 0.04}s both">
+      <div class="rank ${i < 3 ? 'r' + (i + 1) : ''}">${i < 3 ? medals[i] : i + 1}</div>
+      <div class="person-wrap"><div class="av" style="background:${bg}">${initials(p.name)}</div>
+        <div><div class="p-name">${p.name}</div><div class="p-unit">${p.unit}</div></div></div>
+      <div style="text-align:center;font-size:11px;color:var(--gray-400)">${fmtDate(p.samplingDate)}</div>
+      <div class="score-cell"><div class="score-num">${p.chat !== null ? p.chat : '—'}</div><div class="sbar"><div class="sbar-fill" style="width:${p.chat || 0}%;background:var(--bi-blue)"></div></div></div>
+      <div class="score-cell"><div class="score-num">${p.mon  !== null ? p.mon  : '—'}</div><div class="sbar"><div class="sbar-fill" style="width:${p.mon  || 0}%;background:var(--green)"></div></div></div>
+      <div class="score-cell"><div class="score-num">${p.loc  !== null ? p.loc  : '—'}</div><div class="sbar"><div class="sbar-fill" style="width:${p.loc  || 0}%;background:var(--bi-gold)"></div></div></div>
+      <div class="total-score" style="color:${scoreColor}">${p.total}</div>
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════
+// FORM
+// ══════════════════════════════════════════════
+function setMode(m) {
+  curMode = m;
+  document.getElementById('mode-single-btn').classList.toggle('active', m === 'single');
+  document.getElementById('mode-batch-btn').classList.toggle('active', m === 'batch');
+  document.getElementById('single-mode').style.display = m === 'single' ? 'block' : 'none';
+  document.getElementById('batch-mode').style.display = m === 'batch' ? 'block' : 'none';
+}
+
+function selPenilai(v, el) { curPenilai = v; document.querySelectorAll('.p-opt').forEach(o => o.classList.remove('sel')); el.classList.add('sel'); }
+
+function selEval(t) {
+  curEval = t; curRaw = 100;
+  ['chat','mon','loc'].forEach(x => {
+    document.getElementById('et-' + x).classList.toggle('sel', x === t);
+    document.getElementById('sc-' + x).style.display = x === t ? 'block' : 'none';
+  });
+  document.querySelectorAll('#single-mode .pt-card').forEach((el, i) => el.classList.toggle('sel', i === 0));
+  ['nr-chat','nr-mon','nr-loc'].forEach(id => { const el = document.getElementById(id); if (el) el.checked = false; });
+}
+
+function selPt(el, v) { curRaw = v; el.closest('.pt-grid').querySelectorAll('.pt-card').forEach(o => o.classList.remove('sel')); el.classList.add('sel'); }
+function handleNR(cb, sec) {
+  const grid = document.querySelector('#' + sec + ' .pt-grid');
+  if (cb.checked) { curRaw = 0; if (grid) grid.querySelectorAll('.pt-card').forEach(o => o.classList.remove('sel')); }
+  else { curRaw = 100; if (grid) { const f = grid.querySelector('.pt-card'); if (f) f.classList.add('sel'); } }
+}
+function selBatch(type, el, v) { batchRaw[type] = v; el.closest('.batch-pt-grid').querySelectorAll('.bpt').forEach(o => o.classList.remove('sel')); el.classList.add('sel'); }
+function handleBatchNR(cb, type) {
+  if (cb.checked) { batchRaw[type] = 0; cb.closest('.batch-section').querySelector('.batch-pt-grid').querySelectorAll('.bpt').forEach(o => o.classList.remove('sel')); }
+  else { batchRaw[type] = 100; const f = cb.closest('.batch-section').querySelector('.bpt'); if (f) f.classList.add('sel'); }
+}
+
+async function submitForm() {
+  const name = document.getElementById('f-name').value.trim();
+  const nip  = document.getElementById('f-nip').value.trim();
+  const unit = document.getElementById('f-unit').value;
+  const date = document.getElementById('f-date').value;
+  const pic  = document.getElementById('f-pic').value.trim();
+  if (!name || !nip || !unit || !date || !pic) { alert('Mohon lengkapi semua field yang wajib diisi.'); return; }
+  if (!dbReady) { alert('Belum terhubung ke database. Harap tunggu atau periksa koneksi internet.'); return; }
+
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true; btn.textContent = 'Menyimpan...';
+
+  try {
+    const base = { name, nip, unit, date, pic, penilai: curPenilai, createdAt: new Date().toISOString() };
+    if (curMode === 'single') {
+      await dbAdd({ ...base, type: curEval, raw: curRaw, note: document.getElementById('f-note-s').value.trim() });
+    } else {
+      await Promise.all(['chat','mon','loc'].map((t, i) =>
+        dbAdd({ ...base, type: t, raw: batchRaw[t], note: i === 0 ? document.getElementById('f-note-b').value.trim() : '' })
+      ));
+    }
+
+    document.getElementById('thanks-name').textContent = name;
+    resetForm();
+    await loadHistory();
+    openModal('modal-thanks');
+    setConn('ok', '✓ Data tersimpan');
+  } catch (e) {
+    alert('Gagal menyimpan: ' + e.message);
+    setConn('err', '✗ Gagal menyimpan');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Simpan Penilaian →';
+  }
+}
+
+function resetForm() {
+  ['f-name','f-nip','f-note-s','f-note-b'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  document.getElementById('f-unit').value = '';
+  initDate(); selEval('chat');
+  curPenilai = 'Pimpinan';
+  document.querySelectorAll('.p-opt').forEach(o => o.classList.remove('sel'));
+  document.querySelectorAll('.p-opt')[0].classList.add('sel');
+  batchRaw = { chat: 100, mon: 100, loc: 100 };
+  document.querySelectorAll('.bpt').forEach((el, i) => el.classList.toggle('sel', i % 4 === 0));
+  ['bnr-chat','bnr-mon','bnr-loc'].forEach(id => { const el = document.getElementById(id); if (el) el.checked = false; });
+  ['nr-chat','nr-mon','nr-loc'].forEach(id => { const el = document.getElementById(id); if (el) el.checked = false; });
+}
+
+// ══════════════════════════════════════════════
+// HISTORY
+// ══════════════════════════════════════════════
+async function loadHistory() {
+  try {
+    const entries = await dbGetMonth();
+    localEntries = entries;
+    renderHist(entries);
+    updateNamelist(entries);
+  } catch (e) {
+    document.getElementById('hist-body').innerHTML = '<div class="empty-hist">Gagal memuat riwayat.</div>';
+  }
+}
+
+function renderHist(entries) {
+  const rows = [...entries].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  const body = document.getElementById('hist-body');
+  if (!rows.length) { body.innerHTML = '<div class="empty-hist">Belum ada data bulan ini.</div>'; return; }
+  body.innerHTML = rows.map(e => {
+    const scored = Math.round(e.raw * (W[e.type] || 0));
+    const act = isAdmin
+      ? `<span class="h-del" onclick="openEdit('${e.id}')">✏️</span>&nbsp;<span class="h-del" onclick="delEntry('${e.id}')">✕</span>`
+      : `<span class="h-del" style="opacity:.2;cursor:default">🔒</span>`;
+    return `<div class="hist-row">
+      <div><div style="font-weight:600;font-size:12px">${e.name}</div><div class="hist-sub">${e.unit} · ${e.penilai || e.pic}</div></div>
+      <div style="text-align:center;font-size:10px;color:var(--gray-400)">${ELABELS[e.type] || e.type}</div>
+      <div class="h-score">${e.raw}</div>
+      <div class="h-score" style="color:var(--bi-blue)">${scored}</div>
+      <div style="text-align:center;font-size:10px;color:var(--gray-400)">${fmtDate(e.date)}</div>
+      <div style="text-align:right">${act}</div>
+    </div>`;
+  }).join('');
+}
+
+function updateNamelist(entries) {
+  document.getElementById('namelist').innerHTML = [...new Set(entries.map(e => e.name))].map(n => `<option value="${n}">`).join('');
+}
+
+async function delEntry(id) {
+  if (!isAdmin) return;
+  if (!confirm('Hapus entri ini?')) return;
+  try { await dbDelete(id); await loadHistory(); }
+  catch (e) { alert('Gagal menghapus: ' + e.message); }
+}
+
+async function clearAll() {
+  if (!isAdmin) { alert('Login admin terlebih dahulu.'); return; }
+  if (!confirm('Hapus SEMUA data bulan ini dari database?')) return;
+  try {
+    const entries = await dbGetMonth();
+    await Promise.all(entries.map(e => dbDelete(e.id)));
+    await loadHistory();
+    await loadDashboard();
+  } catch (e) { alert('Gagal menghapus: ' + e.message); }
+}
+
+// ══════════════════════════════════════════════
+// EDIT
+// ══════════════════════════════════════════════
+function openEdit(id) {
+  editingId = id;
+  const e = localEntries.find(x => x.id === id);
+  if (!e) return;
+  document.getElementById('edit-raw').value = e.raw;
+  document.getElementById('edit-note').value = e.note || '';
+  openModal('modal-edit');
+}
+
+async function saveEdit() {
+  const raw = parseInt(document.getElementById('edit-raw').value);
+  const note = document.getElementById('edit-note').value;
+  if (isNaN(raw) || raw < 0 || raw > 100) { alert('Poin harus antara 0–100.'); return; }
+  try {
+    await dbUpdate(editingId, { raw, note });
+    closeModal('modal-edit');
+    await loadHistory();
+    setConn('ok', '✓ Data diperbarui');
+  } catch (e) { alert('Gagal memperbarui: ' + e.message); }
+}
+
+// ══════════════════════════════════════════════
+// ADMIN & PAGE NAV
+// ══════════════════════════════════════════════
+function openAdminModal() {
+  if (isAdmin) {
+    isAdmin = false;
+    document.getElementById('admin-badge').classList.remove('show');
+    document.getElementById('admin-toggle').textContent = '🔐 Admin';
+    renderHist(localEntries); return;
+  }
+  document.getElementById('admin-pass').value = '';
+  document.getElementById('admin-err').style.display = 'none';
+  openModal('modal-admin');
+  setTimeout(() => document.getElementById('admin-pass').focus(), 250);
+}
+
+function checkAdmin() {
+  if (document.getElementById('admin-pass').value === ADMIN_PASS) {
+    isAdmin = true;
+    document.getElementById('admin-badge').classList.add('show');
+    document.getElementById('admin-toggle').textContent = '🔓 Logout Admin';
+    closeModal('modal-admin');
+    renderHist(localEntries);
+  } else {
+    document.getElementById('admin-err').style.display = 'block';
+    document.getElementById('admin-pass').value = '';
+    document.getElementById('admin-pass').focus();
+  }
+}
+
+function showPage(p, btn) {
+  document.querySelectorAll('.page').forEach(e => e.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(e => e.classList.remove('active'));
+  document.getElementById('page-' + p).classList.add('active');
+  btn.classList.add('active');
+  if (p === 'dash') loadDashboard();
+  if (p === 'form') loadHistory();
+}
+
+function openModal(id) { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+document.querySelectorAll('.modal-overlay').forEach(m => m.addEventListener('click', e => { if (e.target === m) m.classList.remove('show'); }));
+
+function initDate() {
+  const n = new Date();
+  n.setMinutes(n.getMinutes() - n.getTimezoneOffset());
+  document.getElementById('f-date').value = n.toISOString().slice(0, 10);
+}
+
+// ══════════════════════════════════════════════
+// INIT — tunggu Firebase siap
+// ══════════════════════════════════════════════
+function init() {
+  dbReady = true;
+  setConn('ok', '✓ Terhubung ke database');
+  initDate();
+  document.getElementById('hdr-date').textContent = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  loadDashboard();
+}
+
+if (window._dbReady) {
+  init();
+} else {
+  window.addEventListener('firebase-ready', init);
+  // Timeout fallback
+  setTimeout(() => {
+    if (!dbReady) setConn('err', '✗ Gagal terhubung — periksa konfigurasi Firebase');
+  }, 8000);
+}
+</script>
+</body>
+</html>
